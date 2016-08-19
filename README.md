@@ -1,2 +1,3 @@
-# MiscInfo
+﻿#MiscInfo
+
 Miscellaneous information
