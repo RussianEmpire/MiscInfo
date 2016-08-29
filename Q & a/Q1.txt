@@ -65,57 +65,74 @@ ________________________________________________________________________________
 
 --------------------------------------------------------------------------------------------------------------------------------------
 
-Итоговый код: (стандарт C++11)
+Итоговый код с небольшим тестом: (стандарт C++11)
 
+
+#include <memory>
 
 class SomeClass {
-  static constsexpr const auto MEM1_SIZE_ = 4096UL;
-  static constsexpr const auto MEM2_SIZE_ = 256U * 1024U;
+  static constexpr const auto MEM1_SIZE_ = 4096UL;
+  static constexpr const auto MEM2_SIZE_ = 256U * 1024U;
 public:
   SomeClass() noexcept {
     init();
   }
-  
+
   ~SomeClass() = default;
-  
+
   SomeClass& operator=(const SomeClass& other) noexcept {
     if (!inited()) { // lazy fail-safe initialization
       if (!init()) return *this;
     }
-    memcpy(ptr1, other.ptr1, MEM1_SIZE_);
-    memcpy(ptr2, other.ptr2, MEM2_SIZE_);
-    
+    memcpy(ptr1.get(), other.ptr1.get(), MEM1_SIZE_);
+    memcpy(ptr2.get(), other.ptr2.get(), MEM2_SIZE_);
+
     lastOpOk = true;
     return *this;
   }
-  
+
   SomeClass(const SomeClass& other) noexcept {
     *this = other;
   }
-  
-  constexpr bool inited() const noexcept {
+
+  bool inited() const noexcept {
     return ptr1.get() && ptr2.get(); // in fact, only one need to be checked
   }
-  
+
   bool init() noexcept {
-    if(inited()) return true;
-    
-    std::unique_ptr<char[]> ptr1new = new(std::nothrow) char[MEM1_SIZE_](); // zero init.
-    std::unique_ptr<char[]> ptr2new = new(std::nothrow) char[MEM2_SIZE_]();
+    if (inited()) return true;
+
+    std::unique_ptr<char[]> ptr1new(new(std::nothrow) char[MEM1_SIZE_]()); // zero init. mem. block
+    std::unique_ptr<char[]> ptr2new(new(std::nothrow) char[MEM2_SIZE_]());
     if (!ptr1new.get() || !ptr2new.get())
       return lastOpOk = false;
-    
-    ptr1 = ptr1new, ptr2 = ptr2new; // transfers  ownership
+
+    ptr1 = std::move(ptr1new), ptr2 = std::move(ptr2new); // transfers ownership
     return true;
   }
-  
-  constexpr bool isLastOpOk() const noexcept {
+
+  bool isLastOpOk() const noexcept {
     return lastOpOk;
   }
 private:
-  SomeClass(const SomeClass&) = delete;
+  SomeClass(const SomeClass&&) = delete;
   SomeClass& operator=(SomeClass&&) = delete;
-  
+
   bool lastOpOk = true; // last operation correctness flag (initial state - normal)
-  std::unique_ptr<char[]> ptr1(nullptr), ptr2(nullptr);
+  std::unique_ptr<char[]> ptr1, ptr2;
 };
+
+////
+
+#include <cassert>
+
+int main(int argc, char* argv[]) {
+  SomeClass sc1;
+  assert(sc1.inited() && sc1.isLastOpOk());
+
+  const auto sc1copy = sc1;
+  assert(sc1.inited() && sc1.isLastOpOk());
+  assert(sc1copy.inited() && sc1copy.isLastOpOk());
+
+  return 0;
+}
